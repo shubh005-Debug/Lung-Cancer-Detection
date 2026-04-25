@@ -1,0 +1,164 @@
+import json
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+RECOMMENDATIONS_FILE = os.path.join(os.path.dirname(__file__), "recommendations.json")
+
+
+def get_recommendations(predicted_class: str) -> dict:
+    """
+    Returns AI health recommendations based on predicted cancer type.
+    """
+    try:
+        with open(RECOMMENDATIONS_FILE, "r") as f:
+            all_recs = json.load(f)
+    except FileNotFoundError:
+        logger.warning("recommendations.json not found, using built-in defaults.")
+        all_recs = _default_recommendations()
+    except Exception as e:
+        logger.error(f"Error reading recommendations: {e}")
+        all_recs = _default_recommendations()
+
+    recs = all_recs.get(predicted_class, all_recs.get("default", {}))
+    return recs
+
+
+def _default_recommendations() -> dict:
+    return {
+        "adenocarcinoma": {
+            "precautions": [
+                "Avoid all tobacco products and secondhand smoke immediately",
+                "Schedule an urgent consultation with an oncologist",
+                "Avoid exposure to radon gas, asbestos, and air pollutants",
+                "Do not delay further diagnostic tests (PET scan, biopsy)",
+                "Inform close family members for possible screening"
+            ],
+            "diet_recommendations": [
+                "Increase cruciferous vegetables: broccoli, cauliflower, Brussels sprouts",
+                "Consume antioxidant-rich berries (blueberries, strawberries, raspberries)",
+                "Add turmeric and ginger to meals for anti-inflammatory benefits",
+                "Increase omega-3 fatty acids: salmon, walnuts, flaxseed",
+                "Limit processed foods, red meat, and alcohol intake",
+                "Maintain adequate hydration (8–10 glasses of water daily)"
+            ],
+            "lifestyle_advice": [
+                "Practice deep diaphragmatic breathing exercises daily",
+                "Engage in gentle walking or low-impact aerobic activity",
+                "Prioritize quality sleep (7–9 hours per night)",
+                "Manage stress through meditation or mindfulness",
+                "Consider joining a lung cancer support group",
+                "Keep a symptom journal to share with your medical team"
+            ],
+            "doctor_consultation": [
+                "Consult a pulmonologist or thoracic oncologist immediately",
+                "Request staging CT scan and possible PET scan",
+                "Discuss EGFR, ALK, ROS1 mutation testing for targeted therapy eligibility",
+                "Ask about clinical trial participation",
+                "Consider a second opinion from a major cancer center"
+            ]
+        },
+        "large_cell_carcinoma": {
+            "precautions": [
+                "Seek immediate medical evaluation — this is an aggressive cancer type",
+                "Eliminate all smoking and exposure to carcinogens",
+                "Avoid air pollution; use N95 masks outdoors if necessary",
+                "Do not self-medicate — consult a specialist promptly",
+                "Arrange for a caregiver or support system"
+            ],
+            "diet_recommendations": [
+                "High-calorie, nutrient-dense foods to maintain body weight",
+                "Lean proteins: chicken, fish, legumes, and eggs",
+                "Green tea for its polyphenol and antioxidant properties",
+                "Vitamin C-rich foods: citrus, bell peppers, kiwi",
+                "Avoid undercooked foods to reduce infection risk during treatment",
+                "Consider a registered dietitian specializing in oncology nutrition"
+            ],
+            "lifestyle_advice": [
+                "Rest adequately — fatigue management is critical",
+                "Engage in light physical activity as tolerated",
+                "Avoid large crowds to minimize infection risk",
+                "Maintain a positive mental health routine",
+                "Communicate openly with family and healthcare team",
+                "Document all symptoms meticulously for medical reviews"
+            ],
+            "doctor_consultation": [
+                "Immediate referral to a thoracic oncologist is essential",
+                "Request comprehensive molecular profiling of the tumor",
+                "Discuss surgery, radiation, and chemotherapy options",
+                "Inquire about immunotherapy (PD-L1 testing)",
+                "Ask about palliative care and symptom management support"
+            ]
+        },
+        "squamous_cell_carcinoma": {
+            "precautions": [
+                "Complete cessation of smoking is the most critical step",
+                "Avoid exposure to industrial chemicals, coal, and silica dust",
+                "Use respiratory protection in occupational hazard environments",
+                "Schedule regular follow-up imaging scans",
+                "Monitor for symptoms: hemoptysis, persistent cough, chest pain"
+            ],
+            "diet_recommendations": [
+                "Increase Vitamin A intake: carrots, sweet potatoes, spinach",
+                "Consume folate-rich foods: dark leafy greens, lentils, chickpeas",
+                "Selenium-rich foods: Brazil nuts, sunflower seeds, whole grains",
+                "Avoid alcohol which can interfere with treatment",
+                "Anti-inflammatory diet: olive oil, nuts, avocado",
+                "Maintain healthy body weight to support treatment tolerance"
+            ],
+            "lifestyle_advice": [
+                "Quit smoking using medical support (nicotine replacement, medication)",
+                "Regular moderate exercise as medically approved",
+                "Breathing exercises to improve lung capacity",
+                "Mindfulness and relaxation techniques for stress reduction",
+                "Establish a consistent daily routine",
+                "Stay connected with social support networks"
+            ],
+            "doctor_consultation": [
+                "Urgent consultation with a thoracic surgeon or oncologist",
+                "Request bronchoscopy for tumor characterization",
+                "Discuss resection surgery if tumor is localized",
+                "Consider concurrent chemoradiation therapy",
+                "Ask about PDL1 testing and immunotherapy options"
+            ]
+        },
+        "normal": {
+            "precautions": [
+                "Continue annual low-dose CT screenings if you are high-risk",
+                "Avoid smoking — it remains the #1 risk factor",
+                "Minimize exposure to radon, asbestos, and air pollution",
+                "Stay up to date with vaccinations (flu, pneumonia)",
+                "Report any new respiratory symptoms to your doctor promptly"
+            ],
+            "diet_recommendations": [
+                "Maintain a balanced, plant-forward diet",
+                "Eat a rainbow of fruits and vegetables daily",
+                "Whole grains and fiber for overall metabolic health",
+                "Limit saturated fats and ultra-processed foods",
+                "Stay well-hydrated: 8 glasses of water daily",
+                "Consider omega-3 supplementation for anti-inflammatory support"
+            ],
+            "lifestyle_advice": [
+                "Exercise at least 150 minutes of moderate aerobic activity per week",
+                "Maintain a healthy body weight",
+                "Practice daily deep breathing or yoga",
+                "Avoid air pollution; use air purifiers indoors if needed",
+                "Get 7–9 hours of quality sleep nightly",
+                "Schedule annual health checkups and lung function tests"
+            ],
+            "doctor_consultation": [
+                "Routine annual checkup with your primary care physician",
+                "Lung function test (spirometry) if you have a history of smoking",
+                "Discuss family history of lung cancer for personalized screening plan",
+                "Request low-dose CT if you are 50+ and have 20 pack-year smoking history",
+                "Maintain open communication with your healthcare provider"
+            ]
+        },
+        "default": {
+            "precautions": ["Consult a medical professional for personalized advice."],
+            "diet_recommendations": ["Maintain a balanced, nutritious diet."],
+            "lifestyle_advice": ["Stay active and practice healthy habits."],
+            "doctor_consultation": ["Schedule an appointment with your doctor."]
+        }
+    }
