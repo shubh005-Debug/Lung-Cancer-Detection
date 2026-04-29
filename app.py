@@ -12,28 +12,36 @@ from report_generator import generate_pdf_report
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__,
-    static_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'build'),
+# ── Build folder path ─────────────────────────────
+# Works both locally and on Render
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+BUILD_DIR  = os.path.join(BASE_DIR, '..', 'frontend', 'build')
+BUILD_DIR  = os.path.realpath(BUILD_DIR)
+
+app = Flask(
+    __name__,
+    static_folder=BUILD_DIR if os.path.exists(BUILD_DIR) else None,
     static_url_path='/'
 )
-CORS(app)
 
-# Load model once at startup
+# ── CORS ──────────────────────────────────────────
+CORS(app, origins=[
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://*.vercel.app",
+    "https://*.onrender.com",
+    "*"          # allow all during debugging — tighten later
+])
+
+# ── Load model once ───────────────────────────────
 model_loader = ModelLoader()
 model_loader.load()
 
 
-# ── Serve React Frontend ──────────────────────
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_react(path):
-    build_folder = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'build')
-    if path != "" and os.path.exists(os.path.join(build_folder, path)):
-        return send_from_directory(build_folder, path)
-    return send_from_directory(build_folder, 'index.html')
+# ══════════════════════════════════════════════════
+# API ROUTES  (must come BEFORE the React catch-all)
+# ══════════════════════════════════════════════════
 
-
-# ── API Routes ────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
@@ -50,9 +58,10 @@ def model_info():
         "framework": "TensorFlow / Keras",
         "input_size": "224x224x3",
         "num_classes": 4,
-        "classes": ["adenocarcinoma", "large_cell_carcinoma", "normal", "squamous_cell_carcinoma"],
+        "classes": ["adenocarcinoma", "large_cell_carcinoma",
+                    "normal", "squamous_cell_carcinoma"],
         "accuracy": 92.0,
-        "description": "VGG16-based CNN trained on CT scan images for lung cancer classification"
+        "description": "VGG16 CNN trained on CT scan images for lung cancer classification"
     })
 
 
@@ -65,18 +74,17 @@ def predict():
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
 
-    allowed_extensions = {"png", "jpg", "jpeg", "bmp", "tiff"}
+    allowed = {"png", "jpg", "jpeg", "bmp", "tiff"}
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-    if ext not in allowed_extensions:
-        return jsonify({"error": f"Invalid file type. Allowed: png, jpg, jpeg, bmp, tiff"}), 400
+    if ext not in allowed:
+        return jsonify({"error": "Invalid file type. Allowed: png, jpg, jpeg, bmp, tiff"}), 400
 
     if not model_loader.is_loaded():
         return jsonify({"error": "Model not loaded."}), 503
 
     try:
         result = predict_image(file, model_loader.get_model())
-        recommendations = get_recommendations(result["prediction"])
-        result["recommendations"] = recommendations
+        result["recommendations"] = get_recommendations(result["prediction"])
         return jsonify(result)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -92,22 +100,50 @@ def generate_report():
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
-        prediction_result = data.get("prediction_result", {})
-        recommendations = data.get("recommendations", {})
-        patient_name = data.get("patient_name", "Anonymous")
-
-        pdf_buffer = generate_pdf_report(prediction_result, recommendations, patient_name)
+        pdf_buffer = generate_pdf_report(
+            data.get("prediction_result", {}),
+            data.get("recommendations", {}),
+            data.get("patient_name", "Anonymous")
+        )
         return send_file(
             pdf_buffer,
             mimetype="application/pdf",
             as_attachment=True,
-            download_name=f"LungAI_Report_{patient_name.replace(' ', '_')}.pdf"
+            download_name="LungAI_Report.pdf"
         )
     except Exception as e:
         logger.error(f"Report error: {traceback.format_exc()}")
         return jsonify({"error": "Report generation failed."}), 500
 
 
+# ══════════════════════════════════════════════════
+# SERVE REACT  (catch-all — must be LAST)
+# ══════════════════════════════════════════════════
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    # If React build exists, serve it
+    if os.path.exists(BUILD_DIR):
+        # Serve existing static file (JS, CSS, images…)
+        target = os.path.join(BUILD_DIR, path)
+        if path and os.path.exists(target):
+            return send_from_directory(BUILD_DIR, path)
+        # Fall back to index.html for client-side routing
+        index = os.path.join(BUILD_DIR, 'index.html')
+        if os.path.exists(index):
+            return send_from_directory(BUILD_DIR, 'index.html')
+
+    # No build folder → API-only mode
+    return jsonify({
+        "status": "ok",
+        "message": "LungAI API is running. React build not found.",
+        "endpoints": ["/health", "/model-info", "/predict", "/generate-report"]
+    })
+
+
+# ══════════════════════════════════════════════════
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    logger.info(f"BUILD_DIR = {BUILD_DIR} (exists={os.path.exists(BUILD_DIR)})")
     app.run(debug=False, host="0.0.0.0", port=port)
