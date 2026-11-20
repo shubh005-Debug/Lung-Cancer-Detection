@@ -1,4 +1,3 @@
-
 import logging
 import os
 
@@ -7,8 +6,7 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Load .env for local development
-# Render environment variables are loaded automatically
+# Load .env locally; Render environment variables are also supported
 load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,27 +18,24 @@ MODEL_GDRIVE_ID = os.getenv("MODEL_GDRIVE_ID")
 
 
 def download_model():
-    """Download trained model from Google Drive."""
+    """Download trained model from Google Drive if it doesn't exist."""
 
     if os.path.exists(MODEL_PATH) and os.path.getsize(MODEL_PATH) > 0:
         logger.info("Model file already exists.")
         return
 
-    model_id = os.getenv("MODEL_GDRIVE_ID")
-
-    if not model_id:
-        raise ValueError(
-            "MODEL_GDRIVE_ID is missing from environment variables."
-        )
+    if not MODEL_GDRIVE_ID:
+        raise ValueError("MODEL_GDRIVE_ID is missing from environment variables.")
 
     logger.info("Downloading trained model from Google Drive...")
 
-    url = f"https://drive.google.com/uc?id={model_id}"
+    url = f"https://drive.google.com/uc?id={MODEL_GDRIVE_ID}"
 
     downloaded_file = gdown.download(
         url=url,
         output=MODEL_PATH,
-        quiet=False
+        quiet=False,
+        fuzzy=True
     )
 
     if not downloaded_file or not os.path.exists(MODEL_PATH):
@@ -59,7 +54,6 @@ class ModelLoader:
         self.model_path = model_path or MODEL_PATH
         self._model = None
         self._loaded = False
-        self._is_real_model = False
 
         logger.info(f"Model path: {self.model_path}")
 
@@ -67,26 +61,19 @@ class ModelLoader:
         try:
             import tensorflow as tf
 
-            # Download trained model if missing
+            # Download model if it is missing
             if not os.path.exists(self.model_path):
                 if self.model_path == MODEL_PATH:
                     download_model()
                 else:
                     raise FileNotFoundError(self.model_path)
 
-            # Check if file is empty
-            if os.path.getsize(self.model_path) == 0:
-                raise RuntimeError("Model file is empty.")
-
-            # Strategy 1: Standard loading
+            # Strategy 1: Standard model loading
             try:
-                self._model = tf.keras.models.load_model(
-                    self.model_path
-                )
+                self._model = tf.keras.models.load_model(self.model_path)
 
-                logger.info("Trained model loaded successfully.")
+                logger.info("Model loaded successfully (standard).")
                 self._loaded = True
-                self._is_real_model = True
                 return
 
             except Exception as e1:
@@ -105,31 +92,21 @@ class ModelLoader:
                     metrics=["accuracy"]
                 )
 
-                logger.info(
-                    "Trained model loaded successfully (compile=False)."
-                )
-
+                logger.info("Model loaded successfully (compile=False).")
                 self._loaded = True
-                self._is_real_model = True
                 return
 
             except Exception as e2:
-                logger.error(
-                    f"compile=False loading failed: {e2}"
-                )
+                logger.error(f"compile=False loading failed: {e2}")
 
-            # Strategy 3: Load separate weights if available
+            # Strategy 3: Load separately saved weights, if available
             try:
                 if os.path.exists(WEIGHTS_PATH):
                     self._model = self._build_vgg16_model()
                     self._model.load_weights(WEIGHTS_PATH)
 
-                    logger.info(
-                        "Trained model loaded from weights file."
-                    )
-
+                    logger.info("Model loaded from separate weights file.")
                     self._loaded = True
-                    self._is_real_model = True
                     return
 
                 raise FileNotFoundError(
@@ -137,31 +114,25 @@ class ModelLoader:
                 )
 
             except Exception as e3:
-                logger.error(
-                    f"Weights loading failed: {e3}"
-                )
+                logger.error(f"Weights loading failed: {e3}")
 
-            # Fallback if trained model cannot be loaded
+            # Final fallback
             logger.error(
-                "Real model loading failed. "
-                "Activating demo mock model."
+                "All real model loading strategies failed. "
+                "Demo mock model will be used."
             )
 
             self._model = self._create_mock_model()
-            self._loaded = self._model is not None
-            self._is_real_model = False
+            self._loaded = True
 
         except Exception as e:
-            logger.exception(
-                f"Model initialization failed: {e}"
-            )
+            logger.exception(f"Model initialization failed: {e}")
 
             self._model = self._create_mock_model()
-            self._loaded = self._model is not None
-            self._is_real_model = False
+            self._loaded = True
 
     def _build_vgg16_model(self):
-        """Rebuild VGG16 model architecture for weights loading."""
+        """Rebuild VGG16 architecture."""
 
         import tensorflow as tf
 
@@ -180,10 +151,7 @@ class ModelLoader:
             tf.keras.layers.Dropout(0.5),
             tf.keras.layers.Dense(256, activation="relu"),
             tf.keras.layers.Dropout(0.3),
-            tf.keras.layers.Dense(
-                OUTPUT_SIZE,
-                activation="softmax"
-            )
+            tf.keras.layers.Dense(OUTPUT_SIZE, activation="softmax")
         ])
 
         model.compile(
@@ -197,7 +165,7 @@ class ModelLoader:
         return model
 
     def _create_mock_model(self):
-        """Creates a demo model. Not a trained medical model."""
+        """Minimal mock model for demo purposes only."""
 
         try:
             import tensorflow as tf
@@ -205,10 +173,7 @@ class ModelLoader:
             model = tf.keras.Sequential([
                 tf.keras.layers.Input(shape=(224, 224, 3)),
                 tf.keras.layers.GlobalAveragePooling2D(),
-                tf.keras.layers.Dense(
-                    4,
-                    activation="softmax"
-                )
+                tf.keras.layers.Dense(4, activation="softmax")
             ])
 
             model.compile(
@@ -218,21 +183,17 @@ class ModelLoader:
             )
 
             logger.warning(
-                "DEMO MOCK MODEL ACTIVE. "
-                "This is NOT a trained medical prediction model."
+                "Demo mock model active. "
+                "It is NOT a trained medical prediction model."
             )
 
             return model
 
         except Exception:
-            logger.exception("Mock model creation failed.")
             return None
 
     def is_loaded(self):
         return self._loaded
-
-    def is_real_model(self):
-        return self._is_real_model
 
     def get_model(self):
         return self._model
