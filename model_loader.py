@@ -34,8 +34,7 @@ def download_model():
     downloaded_file = gdown.download(
         url=url,
         output=MODEL_PATH,
-        quiet=False,
-        fuzzy=True
+        quiet=False
     )
 
     if not downloaded_file or not os.path.exists(MODEL_PATH):
