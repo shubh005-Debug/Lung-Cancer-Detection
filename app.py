@@ -2,12 +2,17 @@ from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 import logging
 import traceback
-import os
+import osfrom dotenv import load_dotenv
+
+
 
 from model_loader import ModelLoader
 from predict import predict_image
 from ai_advisor import get_recommendations
 from report_generator import generate_pdf_report
+load_dotenv()
+
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,7 +21,7 @@ app = Flask(__name__,
     static_folder=os.path.join(os.path.dirname(__file__), '..', 'frontend', 'build'),
     static_url_path='/'
 )
-CORS(app)
+CORS(app, origins=[FRONTEND_URL])
 
 # Load model once at startup
 model_loader = ModelLoader()
